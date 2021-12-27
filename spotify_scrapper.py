@@ -27,8 +27,17 @@ song_duration = []
 played_at = []
 spotify_id = []
 song_cover = []
+day = []
+month = []
+year = []
 
-results = sp.current_user_recently_played()
+begin_date = int(yesterday.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()) * 1000
+end_date = int(yesterday.replace(hour=23, minute=59, second=59).timestamp()) * 1000
+results = sp.current_user_recently_played(before=end_date)
+
+if len(results['items']) <= 0:
+    raise Exception('No new songs')
+
 for song in results['items']:
     song_name.append(song['track']['name'])
     artist_name.append(song['track']['album']['artists'][0]['name'])
@@ -36,6 +45,9 @@ for song in results['items']:
     song_duration.append(song['track']['duration_ms'])
     spotify_id.append(song['track']['id'])
     played_at.append(song['played_at'])
+    year.append(int(song['played_at'][:4]))
+    month.append(int(song['played_at'][5:7]))
+    day.append(int(song['played_at'][8:10]))
 
 data_collection = {
     "song_name": song_name,
@@ -43,7 +55,10 @@ data_collection = {
     "song_duration_ms": song_duration,
     "spotify_id": spotify_id,
     "played_at": played_at,
-    "cover_image": song_cover
+    "cover_image": song_cover,
+    "played_year": year,
+    "played_month": month,
+    "played_day": day,
 }
 
 data = pd.DataFrame(data=data_collection, columns=data_collection.keys())
@@ -58,6 +73,9 @@ sql_query = """
         artist_name VARCHAR(200),
         spotify_id VARCHAR(200),
         song_duration_ms INT,
+        played_year INT,
+        played_month INT,
+        played_day INT,
         played_at VARCHAR(200),
         cover_image LONGTEXT,
         CONSTRAINT primary_key_constraint PRIMARY KEY (played_at)
@@ -66,7 +84,7 @@ sql_query = """
 cursor.execute(sql_query)
 print("Open database successfully")
 try:
-    data.to_sql("my_played_tracks", engine, index=False, if_exists='replace')
+    data.to_sql("my_played_tracks", engine, index=False, if_exists='append')
 except:
     print("Data already exists in the database")
 
