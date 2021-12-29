@@ -4,6 +4,7 @@ from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.utils.dates import days_ago
 from spotify_scrapper import spotify_etl
+from spotify_analytics import song_analytics, artist_analytics
 
 default_args = {
     'owner': 'airflow',
@@ -32,4 +33,16 @@ run_etl = PythonOperator(
     dag=dag,
 )
 
-run_etl
+song_stats = PythonOperator(
+    task_id='get_song_stats',
+    python_callable=song_analytics,
+    dag=dag
+)
+
+artist_stats = PythonOperator(
+    task_id='get_artist_stats',
+    python_callable=artist_analytics,
+    dag=dag
+)
+
+run_etl >> [song_stats, artist_stats]

@@ -28,8 +28,8 @@ def spotify_etl():
     month = []
     year = []
     # begin_date = int(yesterday.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()) * 1000
-    end_date = int(yesterday.replace(hour=23, minute=59, second=59).timestamp()) * 1000
-    results = sp.current_user_recently_played(before=end_date)
+    end_date = int(yesterday.replace(hour=0, minute=0, second=0).timestamp()) * 1000
+    results = sp.current_user_recently_played(after=end_date)
     if len(results['items']) <= 0:
         raise Exception('No new songs')
     for song in results['items']:
