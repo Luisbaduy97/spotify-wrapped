@@ -23,4 +23,26 @@ pip install -r requirements
 sh scripts/set_db.sh
 ```
 
+
+## Spotipy variables
+```bash
+# Add SPOTIPY_CLIENT_ID as airflow env variable
+SPOTIPY_CLIENT_ID = random
+# Add SPOTIPY_REDIRECT_URI as airflow env variable
+SPOTIPY_REDIRECT_URI = 	http://localhost:8888/callback
+# Add SPOTIPY_SECRET as airflow env variable
+SPOTIPY_SECRET = secret
+```
+
+## Postgres connection
+```bash
+conn_id = spoti_p
+conn_type = Postgres
+host = host.docker.internal
+login = postgres
+password = yourpassword
+port = 5432
+```
+
+
 This project was made with :heart:  by <a href='https://www.linkedin.com/in/luis-navarrete-baduy-53bb30176/'>Luis Navarrete</a>.
