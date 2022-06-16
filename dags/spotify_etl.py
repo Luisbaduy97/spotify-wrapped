@@ -4,11 +4,9 @@ from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.providers.postgres.operators.postgres import PostgresOperator
 import datetime
-from datetime import timedelta
 from spotipy.oauth2 import SpotifyOAuth
 from airflow.models import Variable
-import json
-
+from airflow.hooks.postgres_hook import PostgresHook
 
 default_args = {
     'owner': 'airflow',
@@ -28,6 +26,29 @@ dag = DAG(
 
 is_db_available = """
     select version();
+    """
+
+song_t = """
+        create table if not exists stg.songs (
+            song_name text,
+            duration int,
+            artist text,
+            album text,
+            album_cover text,
+            played_at text unique
+        )
+    """
+
+minutes_per_artist = """
+        create view stg.total_artist_m as (
+            select artist, sum(duration)/60000 as total_m from stg.songs rp group by artist order by total_m desc
+        )
+    """
+
+songs_m = """
+        create view stg.songs_m as (
+            select song_name, album, album_cover, sum(duration)/60000 as total_m from stg.songs rp group by song_name, album, album_cover  order by total_m desc
+        )
     """
 
 def get_music():
@@ -51,13 +72,29 @@ def extract_data(ti):
         song_name = song['track']['name']
         duration = song['track']['duration_ms']
         played_at = song['played_at']
-        df.append([song_name, duration, artist, album, played_at])
+        album_cover = song['track']['album']['images'][0]['url']
+        df.append([song_name, duration, artist, album, album_cover, played_at])
     return df
+
+def load_data_to_db(ti):
+    df = ti.xcom_pull(task_ids='prepare_data')
+    columns = ['song_name', 'duration', 'artist', 'album', 'album_cover', 'played_at'] # Extract month and year from date
+    post_conn = PostgresHook(postgres_conn_id='spoti_p')
+    df = pd.DataFrame(data=df, columns=columns)
+    df.to_sql(name='recently_played', schema='lnd', con=post_conn.get_sqlalchemy_engine(), if_exists='replace', index=False)
+    return 'complete'
 
 database_available = PostgresOperator(
     postgres_conn_id= 'spoti_p',
     task_id='is_db_available',
     sql=is_db_available,
+    dag=dag
+)
+
+song_table = PostgresOperator(
+    postgres_conn_id= 'spoti_p',
+    task_id='song_table',
+    sql=song_t,
     dag=dag
 )
 
@@ -73,8 +110,28 @@ prepare_data = PythonOperator(
     dag=dag
 )
 
+load_data = PythonOperator(
+    task_id = 'load_data',
+    python_callable = load_data_to_db,
+    dag=dag
+)
+
+aritst_minutes = PostgresOperator(
+    postgres_conn_id= 'spoti_p',
+    task_id='artist_vw',
+    sql=minutes_per_artist,
+    dag=dag
+)
+
+songs_m_vw = PostgresOperator(
+    postgres_conn_id= 'spoti_p',
+    task_id='song_vw',
+    sql=songs_m,
+    dag=dag
+)
+
 # Extract songs data -- check
 # Incloude song popularity, minutes, timestamp, extraer mes, dia, año, artista landing
 # Ejecutar las vistas de artista, y canciones en staging
 
-database_available >> fetch_music >> prepare_data
+database_available >> song_table >> fetch_music >> prepare_data >> load_data >> [aritst_minutes, songs_m_vw]
