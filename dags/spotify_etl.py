@@ -40,15 +40,19 @@ song_t = """
     """
 
 minutes_per_artist = """
-        create view stg.total_artist_m as (
+        create or replace view stg.total_artist_m as (
             select artist, sum(duration)/60000 as total_m from stg.songs rp group by artist order by total_m desc
         )
     """
 
 songs_m = """
-        create view stg.songs_m as (
+        create or replace view stg.songs_m as (
             select song_name, album, album_cover, sum(duration)/60000 as total_m from stg.songs rp group by song_name, album, album_cover  order by total_m desc
         )
+    """
+
+load_to_stg = """
+        insert into stg.songs as s select * from lnd.recently_played as rp on conflict (played_at) do nothing 
     """
 
 def get_music():
@@ -116,6 +120,13 @@ load_data = PythonOperator(
     dag=dag
 )
 
+load_stg_songs = PostgresOperator(
+    postgres_conn_id= 'spoti_p',
+    task_id='add_to_stg',
+    sql=load_to_stg,
+    dag=dag
+)
+
 aritst_minutes = PostgresOperator(
     postgres_conn_id= 'spoti_p',
     task_id='artist_vw',
@@ -134,4 +145,4 @@ songs_m_vw = PostgresOperator(
 # Incloude song popularity, minutes, timestamp, extraer mes, dia, año, artista landing
 # Ejecutar las vistas de artista, y canciones en staging
 
-database_available >> song_table >> fetch_music >> prepare_data >> load_data >> [aritst_minutes, songs_m_vw]
+database_available >> song_table >> fetch_music >> prepare_data >> load_data >> load_stg_songs >> [aritst_minutes, songs_m_vw]
