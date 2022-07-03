@@ -88,6 +88,12 @@ def load_data_to_db(ti):
     df.to_sql(name='recently_played', schema='lnd', con=post_conn.get_sqlalchemy_engine(), if_exists='replace', index=False)
     return 'complete'
 
+def export_data():
+    post_conn = PostgresHook(postgres_conn_id='spoti_p')
+    df = pd.read_sql('SELECT * FROM stg.songs', con=post_conn.get_sqlalchemy_engine())
+    df.to_csv('./data/songs.csv', sep=',', index=False)
+    return 'complete'
+
 database_available = PostgresOperator(
     postgres_conn_id= 'spoti_p',
     task_id='is_db_available',
@@ -141,8 +147,14 @@ songs_m_vw = PostgresOperator(
     dag=dag
 )
 
+songs_backup = PythonOperator(
+    task_id = 'backup_songs',
+    python_callable = export_data,
+    dag=dag
+)
+
 # Extract songs data -- check
 # Incloude song popularity, minutes, timestamp, extraer mes, dia, año, artista landing
 # Ejecutar las vistas de artista, y canciones en staging
 
-database_available >> song_table >> fetch_music >> prepare_data >> load_data >> load_stg_songs >> [aritst_minutes, songs_m_vw]
+database_available >> song_table >> fetch_music >> prepare_data >> load_data >> load_stg_songs >> [aritst_minutes, songs_m_vw] >> songs_backup
